@@ -1425,10 +1425,14 @@ public class CameraActivity extends Activity
         if (!CameraUtil.hasCameraKey()) {
             mPowerShutter = val.equals(CameraSettings.VALUE_ON);
         }
-        if (mPowerShutter && mInCameraApp) {
-            getWindow().addFlags(WindowManager.LayoutParams.PREVENT_POWER_KEY);
-        } else {
-            getWindow().clearFlags(WindowManager.LayoutParams.PREVENT_POWER_KEY);
+        try {
+            if (mPowerShutter && mInCameraApp) {
+                getWindow().addFlags(WindowManager.LayoutParams.PREVENT_POWER_KEY);
+            } else {
+                getWindow().clearFlags(WindowManager.LayoutParams.PREVENT_POWER_KEY);
+            }
+        } catch (SecurityException ex) {
+            Log.e("An exception occurred while adding PREVENT_POWER_KEY flag.\n"+ex.toString());
         }
     }
 
