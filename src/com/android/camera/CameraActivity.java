@@ -1432,7 +1432,7 @@ public class CameraActivity extends Activity
                 getWindow().clearFlags(WindowManager.LayoutParams.PREVENT_POWER_KEY);
             }
         } catch (SecurityException ex) {
-            Log.e("An exception occurred while adding PREVENT_POWER_KEY flag.\n"+ex.toString());
+            Log.e(TAG, "An exception occurred while adding PREVENT_POWER_KEY flag.\n"+ex.toString());
         }
     }
 
