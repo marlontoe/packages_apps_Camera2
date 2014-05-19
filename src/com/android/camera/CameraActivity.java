@@ -1564,6 +1564,7 @@ public class CameraActivity extends Activity
         module.onPauseBeforeSuper();
         module.onPauseAfterSuper();
         ((ViewGroup) mCameraModuleRootView).removeAllViews();
+        ((ViewGroup) mCameraModuleRootView).clearDisappearingChildren();
     }
 
     private void performDeletion() {
