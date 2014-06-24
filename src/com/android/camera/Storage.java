@@ -78,7 +78,7 @@ public class Storage {
             try {
                 exif.writeExif(jpeg, path);
             } catch (Exception e) {
-                Log.e(TAG, "Failed to write data", e);
+                Log.e(TAG, "Failed to write jpeg data", e);
             }
         } else if (jpeg != null) {
             if (!(mimeType.equalsIgnoreCase("jpeg") || mimeType == null)) {
