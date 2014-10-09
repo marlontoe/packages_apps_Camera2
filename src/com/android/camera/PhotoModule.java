@@ -1202,8 +1202,7 @@ public class PhotoModule
                     }
                 }
                 // Animate capture with real jpeg data instead of a preview frame.
-                if (!mBurstShotInProgress && mCameraState != LONGSHOT
-                        && (mReceivedSnapNum == mBurstSnapNum)) {
+                if (!mBurstShotInProgress && mCameraState != LONGSHOT) {
                     mUI.animateCapture(jpegData, orientation, mMirror,
                             (mSnapshotMode == CameraInfo.CAMERA_SUPPORT_MODE_ZSL) &&
                             (mSceneMode != CameraUtil.SCENE_MODE_HDR));
@@ -1721,7 +1720,7 @@ public class PhotoModule
 
     @Override
     public void onShutterButtonClick() {
-        int nbBurstShots = CameraSettings.useZSLBurst(mParameters) ? 1 :
+        int nbBurstShots =
                 Integer.valueOf(mPreferences.getString(CameraSettings.KEY_BURST_MODE, "1"));
 
         if (mPaused || mUI.collapseCameraControls()
@@ -2708,12 +2707,6 @@ public class PhotoModule
         // Slow shutter
         CameraSettings.setSlowShutter(mParameters, mPreferences.getString(CameraSettings.KEY_SLOW_SHUTTER,
                 mActivity.getString(R.string.pref_camera_slow_shutter_default)));
-
-        // ZSL burst, set before enabling HDR
-        if (CameraSettings.useZSLBurst(mParameters)) {
-            mParameters.set("snapshot-burst-num",
-                    mPreferences.getString(CameraSettings.KEY_BURST_MODE, "1"));
-        }
 
         // SuperZoom
         CameraSettings.setSuperZoom(mParameters, mPreferences.getString(CameraSettings.KEY_SUPERZOOM,
