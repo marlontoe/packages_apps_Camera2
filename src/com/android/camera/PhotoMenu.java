@@ -21,6 +21,7 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.hardware.Camera.Parameters;
 import android.view.LayoutInflater;
+import android.widget.Toast;
 
 import com.android.camera.ui.AbstractSettingPopup;
 import com.android.camera.ui.CountdownTimerPopup;
@@ -351,6 +352,12 @@ public class PhotoMenu extends PieController
         // set to non-auto. Also disable beautify when HDR is active.
         // Disable burst mode if it causes damage or doesn't make sense.
         if (notSame(pref, CameraSettings.KEY_CAMERA_HDR, mSettingOff)) {
+            ListPreference scenePref =
+                    mPreferenceGroup.findPreference(CameraSettings.KEY_SCENE_MODE);
+            if (scenePref != null && notSame(scenePref, CameraSettings.KEY_SCENE_MODE,
+                    Parameters.SCENE_MODE_AUTO)) {
+                Toast.makeText(mActivity, R.string.hdr_enable_message, Toast.LENGTH_LONG).show();
+            }
             setPreference(CameraSettings.KEY_SCENE_MODE, Parameters.SCENE_MODE_AUTO);
             setPreference(CameraSettings.KEY_BEAUTY_MODE, mSettingOff);
             setPreference(CameraSettings.KEY_SLOW_SHUTTER, "0");
@@ -358,11 +365,16 @@ public class PhotoMenu extends PieController
             disableBurstMode();
         } else if (notSame(pref, CameraSettings.KEY_SCENE_MODE, Parameters.SCENE_MODE_AUTO) ||
                    notSame(pref, CameraSettings.KEY_ASD, mSettingOff)) {
-            setPreference(CameraSettings.KEY_CAMERA_HDR, mSettingOff);
             setPreference(CameraSettings.KEY_SLOW_SHUTTER, "0");
             if (!notSame(pref, CameraSettings.KEY_ASD, mSettingOff)) {
                 setPreference(CameraSettings.KEY_ASD, mSettingOff);
             }
+            ListPreference hdrPref =
+                    mPreferenceGroup.findPreference(CameraSettings.KEY_CAMERA_HDR);
+            if (hdrPref != null && notSame(hdrPref, CameraSettings.KEY_CAMERA_HDR, mSettingOff)) {
+                Toast.makeText(mActivity, R.string.scene_enable_message, Toast.LENGTH_LONG).show();
+            }
+            setPreference(CameraSettings.KEY_CAMERA_HDR, mSettingOff);
         } else if (notSame(pref, CameraSettings.KEY_BEAUTY_MODE, mSettingOff)) {
             setPreference(CameraSettings.KEY_CAMERA_HDR, mSettingOff);
             setPreference(CameraSettings.KEY_SLOW_SHUTTER, "0");

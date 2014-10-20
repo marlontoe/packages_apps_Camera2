@@ -603,8 +603,10 @@ public class VideoModule implements CameraModule,
         if (mOrientation != newOrientation) {
             mOrientation = newOrientation;
             Log.v(TAG, "onOrientationChanged, update parameters");
-            if ((mParameters != null) && (true == mPreviewing) && !mMediaRecorderRecording){
-                setCameraParameters();
+            if ((mCameraDevice != null) && (mParameters != null)
+                    && (true == mPreviewing) && !mMediaRecorderRecording){
+                setFlipValue();
+                mCameraDevice.setParameters(mParameters);
             }
         }
 
@@ -1506,7 +1508,11 @@ public class VideoModule implements CameraModule,
 
     private void saveVideo() {
         if (mVideoFileDescriptor == null) {
-            long duration = SystemClock.uptimeMillis() - mRecordingStartTime + mRecordingTotalTime;
+            long duration = 0L;
+            if (mMediaRecorderPausing == false)
+                duration = SystemClock.uptimeMillis() - mRecordingStartTime + mRecordingTotalTime;
+            else
+                duration = mRecordingTotalTime;
             if (duration > 0) {
                 if (mCaptureTimeLapse) {
                     duration = getTimeLapseVideoLength(duration);
@@ -1521,6 +1527,20 @@ public class VideoModule implements CameraModule,
                 mCurrentVideoValues = null;
                 return;
             }
+
+            /* Change the duration as per HFR selection */
+            String hfr = mParameters.getVideoHighFrameRate();
+            int defaultFps = 30;
+            int hfrRatio = 1;
+            if (!("off".equals(hfr))) {
+                try {
+                   int hfrFps = Integer.parseInt(hfr);
+                   hfrRatio = hfrFps / defaultFps;
+                } catch(Exception ex) {
+                    // Do nothing
+                }
+            }
+            duration = duration * hfrRatio;
 
             mActivity.getMediaSaveService().addVideo(mCurrentVideoFilename,
                     duration, mCurrentVideoValues,
@@ -1811,6 +1831,7 @@ public class VideoModule implements CameraModule,
         UsageStatistics.onEvent(UsageStatistics.COMPONENT_CAMERA,
                 fail ? UsageStatistics.ACTION_CAPTURE_FAIL :
                     UsageStatistics.ACTION_CAPTURE_DONE, "Video",
+                mMediaRecorderPausing ? mRecordingTotalTime :
                     SystemClock.uptimeMillis() - mRecordingStartTime + mRecordingTotalTime);
         mStopRecPending = false;
         return fail;
@@ -1941,6 +1962,53 @@ public class VideoModule implements CameraModule,
         return supported == null ? false : supported.indexOf(value) >= 0;
     }
 
+    private void setFlipValue() {
+
+        // Read Flip mode from adb command
+        //value: 0(default) - FLIP_MODE_OFF
+        //value: 1 - FLIP_MODE_H
+        //value: 2 - FLIP_MODE_V
+        //value: 3 - FLIP_MODE_VH
+        int preview_flip_value = SystemProperties.getInt("debug.camera.preview.flip", 0);
+        int video_flip_value = SystemProperties.getInt("debug.camera.video.flip", 0);
+        int picture_flip_value = SystemProperties.getInt("debug.camera.picture.flip", 0);
+        int rotation = CameraUtil.getJpegRotation(mCameraId, mOrientation);
+        mParameters.setRotation(rotation);
+        if (rotation == 90 || rotation == 270) {
+            // in case of 90 or 270 degree, V/H flip should reverse
+            if (preview_flip_value == 1) {
+                preview_flip_value = 2;
+            } else if (preview_flip_value == 2) {
+                preview_flip_value = 1;
+            }
+            if (video_flip_value == 1) {
+                video_flip_value = 2;
+            } else if (video_flip_value == 2) {
+                video_flip_value = 1;
+            }
+            if (picture_flip_value == 1) {
+                picture_flip_value = 2;
+            } else if (picture_flip_value == 2) {
+                picture_flip_value = 1;
+            }
+        }
+        String preview_flip = CameraUtil.getFilpModeString(preview_flip_value);
+        String video_flip = CameraUtil.getFilpModeString(video_flip_value);
+        String picture_flip = CameraUtil.getFilpModeString(picture_flip_value);
+
+        if(CameraUtil.isSupported(preview_flip, CameraSettings.getSupportedFlipMode(mParameters))){
+            mParameters.set(CameraSettings.KEY_QC_PREVIEW_FLIP, preview_flip);
+        }
+        if(CameraUtil.isSupported(video_flip, CameraSettings.getSupportedFlipMode(mParameters))){
+            mParameters.set(CameraSettings.KEY_QC_VIDEO_FLIP, video_flip);
+        }
+        if(CameraUtil.isSupported(picture_flip, CameraSettings.getSupportedFlipMode(mParameters))){
+            mParameters.set(CameraSettings.KEY_QC_SNAPSHOT_PICTURE_FLIP, picture_flip);
+        }
+
+
+    }
+
      private void qcomSetCameraParameters(){
         // add QCOM Parameters here
         // Set color effect parameter.
@@ -1997,6 +2065,30 @@ public class VideoModule implements CameraModule,
                 Log.e(TAG, "supported hfr sizes is null");
             }
 
+            int hfrFps = Integer.parseInt(highFrameRate);
+            int inputBitrate = videoWidth*videoHeight*hfrFps;
+
+            //check if codec supports the resolution, otherwise throw toast
+            List<VideoEncoderCap> videoEncoders = EncoderCapabilities.getVideoEncoders();
+            for (VideoEncoderCap videoEncoder: videoEncoders) {
+                if (videoEncoder.mCodec == mVideoEncoder){
+                    int maxBitrate = (videoEncoder.mMaxHFRFrameWidth *
+                                     videoEncoder.mMaxHFRFrameHeight *
+                                     videoEncoder.mMaxHFRMode);
+                    if (inputBitrate > maxBitrate ){
+                            Log.e(TAG,"Selected codec "+mVideoEncoder+
+                                " does not support HFR " + highFrameRate + " with "+ videoWidth
+                                + "x" + videoHeight +" resolution");
+                            Log.e(TAG, "Codec capabilities: " +
+                                "mMaxHFRFrameWidth = " + videoEncoder.mMaxHFRFrameWidth + " , "+
+                                "mMaxHFRFrameHeight = " + videoEncoder.mMaxHFRFrameHeight + " , "+
+                                "mMaxHFRMode = " + videoEncoder.mMaxHFRMode);
+                            mUnsupportedHFRVideoSize = true;
+                    }
+                    break;
+                }
+            }
+
             if(mUnsupportedHFRVideoSize)
                 Log.v(TAG,"Unsupported hfr resolution");
 
@@ -2011,48 +2103,7 @@ public class VideoModule implements CameraModule,
             mParameters.setVideoHighFrameRate("off");
         }
 
-        // Read Flip mode from adb command
-        //value: 0(default) - FLIP_MODE_OFF
-        //value: 1 - FLIP_MODE_H
-        //value: 2 - FLIP_MODE_V
-        //value: 3 - FLIP_MODE_VH
-        int preview_flip_value = SystemProperties.getInt("debug.camera.preview.flip", 0);
-        int video_flip_value = SystemProperties.getInt("debug.camera.video.flip", 0);
-        int picture_flip_value = SystemProperties.getInt("debug.camera.picture.flip", 0);
-        int rotation = CameraUtil.getJpegRotation(mCameraId, mOrientation);
-        mParameters.setRotation(rotation);
-        if (rotation == 90 || rotation == 270) {
-            // in case of 90 or 270 degree, V/H flip should reverse
-            if (preview_flip_value == 1) {
-                preview_flip_value = 2;
-            } else if (preview_flip_value == 2) {
-                preview_flip_value = 1;
-            }
-            if (video_flip_value == 1) {
-                video_flip_value = 2;
-            } else if (video_flip_value == 2) {
-                video_flip_value = 1;
-            }
-            if (picture_flip_value == 1) {
-                picture_flip_value = 2;
-            } else if (picture_flip_value == 2) {
-                picture_flip_value = 1;
-            }
-        }
-        String preview_flip = CameraUtil.getFilpModeString(preview_flip_value);
-        String video_flip = CameraUtil.getFilpModeString(video_flip_value);
-        String picture_flip = CameraUtil.getFilpModeString(picture_flip_value);
-
-        if(CameraUtil.isSupported(preview_flip, CameraSettings.getSupportedFlipMode(mParameters))){
-            mParameters.set(CameraSettings.KEY_QC_PREVIEW_FLIP, preview_flip);
-        }
-        if(CameraUtil.isSupported(video_flip, CameraSettings.getSupportedFlipMode(mParameters))){
-            mParameters.set(CameraSettings.KEY_QC_VIDEO_FLIP, video_flip);
-        }
-        if(CameraUtil.isSupported(picture_flip, CameraSettings.getSupportedFlipMode(mParameters))){
-            mParameters.set(CameraSettings.KEY_QC_SNAPSHOT_PICTURE_FLIP, picture_flip);
-        }
-
+        setFlipValue();
         // Set Video HDR.
         String videoHDR = mPreferences.getString(
                 CameraSettings.KEY_VIDEO_HDR,
@@ -2062,6 +2113,39 @@ public class VideoModule implements CameraModule,
              mParameters.setVideoHDRMode(videoHDR);
         } else
              mParameters.setVideoHDRMode("off");
+
+        //HFR recording not supported with DIS,TimeLapse,HDR option
+        String hfr = mParameters.getVideoHighFrameRate();
+        String hdr = mParameters.getVideoHDRMode();
+        if ((hfr != null) && (!hfr.equals("off"))) {
+             // Read time lapse recording interval.
+             String frameIntervalStr = mPreferences.getString(
+                    CameraSettings.KEY_VIDEO_TIME_LAPSE_FRAME_INTERVAL,
+                    mActivity.getString(R.string.pref_video_time_lapse_frame_interval_default));
+             int timeLapseInterval = Integer.parseInt(frameIntervalStr);
+             if ( (timeLapseInterval != 0) ||
+                  (disMode.equals("enable")) ||
+                  ((hdr != null) && (!hdr.equals("off"))) ) {
+                Log.v(TAG,"HDR/DIS/Time Lapse ON for HFR selection, turning HFR off");
+                Toast.makeText(mActivity, R.string.error_app_unsupported_hfr_selection,
+                          Toast.LENGTH_LONG).show();
+                mParameters.setVideoHighFrameRate("off");
+                mUI.overrideSettings(CameraSettings.KEY_VIDEO_HIGH_FRAME_RATE,"off");
+             }
+        }
+
+        //getSupportedPictureSizes will always send a sorted a list in descending order
+        Size biggestSize = mParameters.getSupportedPictureSizes().get(0);
+
+        if (biggestSize.width <= videoWidth || biggestSize.height <= videoHeight) {
+            if (disMode.equals("enable")) {
+                Log.v(TAG,"DIS is not supported for this video quality");
+                Toast.makeText(mActivity, R.string.error_app_unsupported_dis,
+                               Toast.LENGTH_LONG).show();
+                mParameters.set(CameraSettings.KEY_QC_DIS_MODE, "disable");
+                mUI.overrideSettings(CameraSettings.KEY_DIS,"disable");
+            }
+        }
     }
     @SuppressWarnings("deprecation")
     private void setCameraParameters() {

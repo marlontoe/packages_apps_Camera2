@@ -548,6 +548,7 @@ public class PhotoModule
         mFocusManager.onPreviewStarted();
         startFaceDetection();
         locationFirstRun();
+        mUI.enableShutter(true);
     }
 
     // Prompt the user to pick to record location for the very first run of
@@ -1099,7 +1100,9 @@ public class PhotoModule
                 }
                 mUI.resumeFaceDetection();
                 mCameraDevice.startPreview();
-                setCameraState(IDLE);
+                if (!mIsImageCaptureIntent) {
+                    setCameraState(IDLE);
+                }
             }
 
             final ExifInterface exif = Exif.getExif(jpegData);
@@ -1242,7 +1245,8 @@ public class PhotoModule
             }
             if (mSnapshotMode == CameraInfo.CAMERA_SUPPORT_MODE_ZSL &&
                 mCameraState != LONGSHOT &&
-                mReceivedSnapNum == mBurstSnapNum) {
+                mReceivedSnapNum == mBurstSnapNum &&
+                !mIsImageCaptureIntent) {
                 cancelAutoFocus();
             }
 
@@ -1508,9 +1512,10 @@ public class PhotoModule
             overrideCameraSettings(flashMode, whiteBalance, focusMode,
                     Integer.toString(mParameters.getExposureCompensation()),
                     mParameters.getAutoExposure(),
-                    getSaturationSafe(), getContrastSafe());
+                    getSaturationSafe(), getContrastSafe(),
+                    mParameters.getColorEffect());
         } else {
-            overrideCameraSettings(null, null, null, null, null, null, null);
+            overrideCameraSettings(null, null, null, null, null, null, null, null);
         }
     }
 
@@ -1518,7 +1523,7 @@ public class PhotoModule
             final String whiteBalance, final String focusMode,
             final String exposureMode,
             final String autoExposure, final String saturation,
-            final String contrast) {
+            final String contrast, final String colorEffect) {
         mUI.overrideSettings(
                 CameraSettings.KEY_FLASH_MODE, flashMode,
                 CameraSettings.KEY_WHITE_BALANCE, whiteBalance,
@@ -1526,7 +1531,8 @@ public class PhotoModule
                 CameraSettings.KEY_EXPOSURE, exposureMode,
                 CameraSettings.KEY_AUTOEXPOSURE, autoExposure,
                 CameraSettings.KEY_SATURATION, saturation,
-                CameraSettings.KEY_CONTRAST, contrast);
+                CameraSettings.KEY_CONTRAST, contrast,
+                CameraSettings.KEY_COLOR_EFFECT, colorEffect);
         if (CameraUtil.needSamsungHDRFormat()){
             if (mSceneMode == CameraUtil.SCENE_MODE_HDR) {
                 mUI.overrideSettings(CameraSettings.KEY_EXPOSURE,
@@ -1558,7 +1564,8 @@ public class PhotoModule
             oldOrientation != OrientationEventListener.ORIENTATION_UNKNOWN) {
             Log.v(TAG, "onOrientationChanged, update parameters");
             if (mParameters != null && mCameraDevice != null) {
-                onSharedPreferenceChanged();
+                setFlipValue();
+                mCameraDevice.setParameters(mParameters);
             }
         }
 
@@ -2576,6 +2583,11 @@ public class PhotoModule
                 mCameraDevice.setHistogramMode(null);
             }
         }
+
+        setFlipValue();
+    }
+
+    private void setFlipValue() {
         // Read Flip mode from adb command
         //value: 0(default) - FLIP_MODE_OFF
         //value: 1 - FLIP_MODE_H
@@ -2617,6 +2629,7 @@ public class PhotoModule
             mParameters.set(CameraSettings.KEY_QC_SNAPSHOT_PICTURE_FLIP, picture_flip);
         }
     }
+
     @TargetApi(Build.VERSION_CODES.JELLY_BEAN)
     private void setAutoExposureLockIfSupported() {
         if (mAeLockSupported) {
@@ -2734,6 +2747,12 @@ public class PhotoModule
         } else {
             if (hdrOn) {
                 mSceneMode = CameraUtil.SCENE_MODE_HDR;
+                if (!(Parameters.SCENE_MODE_AUTO).equals(mParameters.getSceneMode())
+                    && !(Parameters.SCENE_MODE_HDR).equals(mParameters.getSceneMode())) {
+                    mParameters.setSceneMode(Parameters.SCENE_MODE_AUTO);
+                    mCameraDevice.setParameters(mParameters);
+                    mParameters = mCameraDevice.getParameters();
+                }
             } else if (asdOn) {
                 mSceneMode = CameraUtil.SCENE_MODE_ASD;
             } else {
@@ -2838,6 +2857,9 @@ public class PhotoModule
     // the subsets actually need updating. The PREFERENCE set needs extra
     // locking because the preference can be changed from GLThread as well.
     private void setCameraParameters(int updateSet) {
+        if (mCameraDevice == null) {
+            return;
+        }
         synchronized (mCameraDevice) {
             boolean doModeSwitch = false;
 
