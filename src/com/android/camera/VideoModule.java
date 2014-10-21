@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2012 The Android Open Source Project
- * Copyright (C) 2013 The CyanogenMod Project
+ * Copyright (C) 2013-2014 The CyanogenMod Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -242,7 +242,7 @@ public class VideoModule implements CameraModule,
             return;
         }
         mParameters = mCameraDevice.getParameters();
-        mPreviewFocused = true;
+        mPreviewFocused = arePreviewControlsVisible();
         initializeCapabilities();
     }
 
@@ -443,6 +443,9 @@ public class VideoModule implements CameraModule,
 
         // Power shutter
         mActivity.initPowerShutter(mPreferences);
+
+        // Max brightness
+        mActivity.initMaxBrightness(mPreferences);
 
         /*
          * To reduce startup time, we start the preview in another thread.
@@ -1071,6 +1074,7 @@ public class VideoModule implements CameraModule,
         mCameraDevice.stopPreview();
         mPreviewing = false;
         mStopPrevPending = false;
+        mUI.enableShutter(false);
     }
 
     private void closeCamera() {
@@ -2325,6 +2329,7 @@ public class VideoModule implements CameraModule,
             }
             mUI.updateOnScreenIndicators(mParameters, mPreferences);
             mActivity.initPowerShutter(mPreferences);
+            mActivity.initMaxBrightness(mPreferences);
         }
     }
 

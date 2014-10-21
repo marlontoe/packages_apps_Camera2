@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2012 The Android Open Source Project
- * Copyright (C) 2014 The CyanogenMod Project
+ * Copyright (C) 2013-2014 The CyanogenMod Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -515,6 +515,9 @@ public class PhotoModule
 
         // Power shutter
         mActivity.initPowerShutter(mPreferences);
+
+        // Max brightness
+        mActivity.initMaxBrightness(mPreferences);
 
         if (mOpenCameraThread == null && !mActivity.mIsModuleSwitchInProgress) {
             mOpenCameraThread = new OpenCameraThread();
@@ -1501,12 +1504,8 @@ public class PhotoModule
         // read settings from preferences so we retain user preferences.
         if (!Parameters.SCENE_MODE_AUTO.equals(mSceneMode) ||
             CameraSettings.isSlowShutterEnabled(mParameters)) {
-            String flashMode = mPreferences.getString(
-                    CameraSettings.KEY_FLASH_MODE,
-                    mActivity.getString(R.string.pref_camera_flashmode_default));
-            String whiteBalance = mPreferences.getString(
-                    CameraSettings.KEY_WHITE_BALANCE,
-                    mActivity.getString(R.string.pref_camera_whitebalance_default));
+            String flashMode = mParameters.getFlashMode();
+            String whiteBalance = Parameters.WHITE_BALANCE_AUTO;
             String focusMode = mFocusManager.getFocusMode();
 
             overrideCameraSettings(flashMode, whiteBalance, focusMode,
@@ -1956,6 +1955,9 @@ public class PhotoModule
 
         // Load the power shutter
         mActivity.initPowerShutter(mPreferences);
+
+        // Load max brightness
+        mActivity.initMaxBrightness(mPreferences);
 
         mNamedImages = null;
 
@@ -2833,6 +2835,15 @@ public class PhotoModule
 
         } else {
             mFocusManager.overrideFocusMode(mParameters.getFocusMode());
+            if (hdrOn) {
+                mParameters.setFlashMode(Parameters.FLASH_MODE_OFF);
+            } else {
+                mParameters.setFlashMode(Parameters.FLASH_MODE_AUTO);
+            }
+            if (CameraUtil.isSupported(Parameters.WHITE_BALANCE_AUTO,
+                    mParameters.getSupportedWhiteBalance())) {
+                mParameters.setWhiteBalance(Parameters.WHITE_BALANCE_AUTO);
+            }
         }
 
         if (mContinuousFocusSupported && ApiHelper.HAS_AUTO_FOCUS_MOVE_CALLBACK) {
@@ -2976,6 +2987,7 @@ public class PhotoModule
             mUI.updateOnScreenIndicators(mParameters, mPreferenceGroup,
                 mPreferences);
             mActivity.initPowerShutter(mPreferences);
+            mActivity.initMaxBrightness(mPreferences);
         } else {
             mHandler.sendEmptyMessage(SET_PHOTO_UI_PARAMS);
         }
